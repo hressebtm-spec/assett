@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Manajemen Aset & Scanner</title>
+    
+    <!-- Tailwind CSS (Konfigurasi untuk Dark Mode) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+        }
+    </script>
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- SheetJS (Export & Import Excel) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- FontAwesome Icons -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    
+    <style>
+        .tab-content { display: none; }
+        .tab-content.active { display: block; animation: fadeIn 0.3s; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        body { padding-bottom: 70px; font-family: sans-serif; transition: background-color 0.3s ease, color 0.3s ease; }
+        .nav-btn.active { color: #2563eb; font-weight: bold; }
+        .dark .nav-btn.active { color: #60a5fa; }
+        
+        /* Loader Animation */
+        .loader { border: 3px solid rgba(255,255,255,0.3); border-radius: 50%; border-top: 3px solid #3b82f6; width: 24px; height: 24px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        /* Modifikasi kalender input type date di dark mode */
+        .dark input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1); }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-900 dark:bg-gray-900 dark:text-gray-100">
+
+    <!-- Script Inisialisasi Tema -->
+    <script>
+        if (localStorage.getItem('theme') === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            document.documentElement.classList.add('dark');
+        } else {
+            document.documentElement.classList.remove('dark');
+        }
+    </script>
+
+    <!-- Header -->
+    <header class="bg-blue-600 dark:bg-blue-800 text-white p-4 shadow-md sticky top-0 z-40 flex justify-between items-center transition-colors">
+        <h1 class="text-xl font-bold"><i class="fas fa-wallet mr-2"></i>MyAssets</h1>
+        <div class="flex gap-4 items-center">
+            <button onclick="toggleTheme()" id="themeToggleBtn" class="text-blue-100 hover:text-white text-lg transition">
+                <i class="fas fa-moon"></i>
+            </button>
+            <button onclick="openApiModal()" class="text-blue-100 hover:text-white text-lg transition" title="Pengaturan AI">
+                <i class="fas fa-cog"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="p-4 max-w-md mx-auto">
+        
+        <!-- DASHBOARD TAB -->
+        <section id="tab-dashboard" class="tab-content active">
+            <!-- Filter Card -->
+            <div class="bg-white dark:bg-gray-800 rounded-xl shadow p-4 mb-5 border-t-4 border-blue-400 transition-colors">
+                <h3 class="text-sm font-bold text-gray-700 dark:text-gray-200 mb-3"><i class="fas fa-filter mr-1"></i> Filter Periode</h3>
+                <div class="flex flex-col gap-3">
+                    <div class="flex gap-2 items-center">
+                        <div class="w-full">
+                            <label class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase">Dari</label>
+                            <input type="date" id="filterStart" onchange="updateDashboard()" class="w-full bg-white dark:bg-gray-700 border dark:border-gray-600 rounded-lg p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-colors">
+                        </div>
+                        <div class="w-full">
+                            <label class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase">Sampai</label>
+                            <input type="date" id="filterEnd" onchange="updateDashboard()" class="w-full bg-white dark:bg-gray-700 border dark:border-gray-600 rounded-lg p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-colors">
+                        </div>
+                    </div>
+                    <button onclick="resetFilter()" class="w-full bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 text-sm py-2 rounded-lg font-semibold transition">
+                        Reset Filter
+                    </button>
+                </div>
+            </div>
+
+            <!-- Total Aset -->
+            <div class="bg-white dark:bg-gray-800 rounded-xl shadow p-5 mb-5 border-l-4 border-blue-500 transition-colors">
+                <p class="text-gray-500 dark:text-gray-400 text-sm font-semibold mb-1">Total Nilai Aset</p>
+                <h2 id="totalAsset" class="text-3xl font-bold text-gray-800 dark:text-white">Rp 0</h2>
+                <p id="totalCount" class="text-xs text-gray-400 dark:text-gray-500 mt-2">0 Aset</p>
+            </div>
+
+            <!-- Chart Kategori -->
+            <div class="bg-white dark:bg-gray-800 rounded-xl shadow p-4 mb-5 transition-colors">
+                <h3 class="text-sm font-bold text-gray-700 dark:text-gray-200 mb-3"><i class="fas fa-chart-pie mr-1"></i> Kategori</h3>
+                <canvas id="categoryChart" height="200"></canvas>
+            </div>
+
+            <!-- Chart Tahun -->
+            <div class="bg-white dark:bg-gray-800 rounded-xl shadow p-4 transition-colors">
+                <h3 class="text-sm font-bold text-gray-700 dark:text-gray-200 mb-3"><i class="fas fa-chart-bar mr-1"></i> Per Tahun</h3>
+                <canvas id="yearChart" height="200"></canvas>
+            </div>
+        </section>
+
+        <!-- TAMBAH ASET TAB -->
+        <section id="tab-tambah" class="tab-content">
+            
+            <!-- Tombol Scan / Upload Struk AI -->
+            <div class="bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-700 dark:to-indigo-800 rounded-xl shadow p-4 mb-5 text-white text-center transition-colors">
+                <h3 class="font-bold mb-3">Scan Struk / Screenshot Pembelian</h3>
+                
+                <!-- Input file tersembunyi untuk kamera & galeri -->
+                <input type="file" id="cameraInput" accept="image/*" capture="environment" class="hidden" onchange="processReceipt(event)">
+                <input type="file" id="galleryInput" accept="image/*" class="hidden" onchange="processReceipt(event)">
+
+                <div class="grid grid-cols-2 gap-2">
+                    <button onclick="triggerCamera()" class="bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 font-bold py-2 px-3 rounded-xl shadow hover:bg-blue-50 dark:hover:bg-gray-700 transition flex items-center justify-center text-xs">
+                        <i class="fas fa-camera mr-1.5"></i> Ambil Foto
+                    </button>
+                    <button onclick="triggerGallery()" class="bg-white dark:bg-gray-800 text-indigo-600 dark:text-indigo-400 font-bold py-2 px-3 rounded-xl shadow hover:bg-indigo-50 dark:hover:bg-gray-700 transition flex items-center justify-center text-xs">
+                        <i class="fas fa-upload mr-1.5"></i> Upload File
+                    </button>
+                </div>
+
+                <div id="aiLoading" class="hidden mt-3 flex items-center justify-center gap-2">
+                    <div class="loader"></div>
+                    <span class="text-sm font-medium text-blue-100">AI sedang membaca struk...</span>
+                </div>
+            </div>
+
+            <div class="bg-white dark:bg-gray-800 rounded-xl shadow p-5 transition-colors">
+                <h2 class="text-lg font-bold
